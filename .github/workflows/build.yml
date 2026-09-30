@@ -16,6 +16,9 @@ on:
         required: false
         default: 'main'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
