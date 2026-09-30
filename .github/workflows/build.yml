@@ -148,6 +148,24 @@ jobs:
           print('HEADER_DECODED_OK')
           PY
 
+      - name: compress for release
+        run: |
+          gzip -9 -c new_boot.img > new_boot.img.gz || true
+          gzip -9 -c ksrc/out/arch/arm64/boot/Image > kernel_Image.gz || true
+          ls -la new_boot.img.gz kernel_Image.gz 2>/dev/null || true
+
+      - name: publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: KSU-GKI build ${{ github.run_number }}
+          body: KSU-GKI kernel for 5.10.257-android12-9 Kirara RiverSouth mondrian
+          files: |
+            new_boot.img.gz
+            kernel_Image.gz
+          draft: false
+          prerelease: false
+
       - uses: actions/upload-artifact@v4
         with:
           name: ksu-gki-boot
