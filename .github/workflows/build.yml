@@ -62,10 +62,10 @@ jobs:
         run: |
           git clone --depth=1 -b "${{ github.event.inputs.ksu_branch }}" https://github.com/tiann/KernelSU.git ksu
           cp -a ksu/kernel ksrc/drivers/kernelsu
-          cp -a ksu/uapi ksrc/drivers/kernelsu/uapi
+          (cp -a ksu/uapi ksrc/drivers/kernelsu/uapi 2>/dev/null || echo "no uapi dir (older KSU layout)")
           grep -q kernelsu ksrc/drivers/Makefile || printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> ksrc/drivers/Makefile
           grep -q kernelsu ksrc/drivers/Kconfig || sed -i '/^endmenu/i source "drivers/kernelsu/Kconfig"' ksrc/drivers/Kconfig
-          sed -i '1i ccflags-y += -I$(srctree)/drivers/kernelsu' ksrc/drivers/kernelsu/Kbuild
+          (sed -i '1i ccflags-y += -I$(srctree)/drivers/kernelsu' ksrc/drivers/kernelsu/Kbuild 2>/dev/null || true)
           tail -2 ksrc/drivers/Makefile
           tail -2 ksrc/drivers/Kconfig
 
