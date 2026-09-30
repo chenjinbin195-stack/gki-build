@@ -84,6 +84,15 @@ jobs:
 
       - name: build
         run: |
+          # FULL LTO 链接 vmlinux.o 需 20GB+ 内存，16GB runner 不够，加 swap
+          if [ ! -f /swapfile ]; then
+            sudo fallocate -l 12G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=12288 status=none
+            sudo chmod 600 /swapfile
+            sudo mkswap /swapfile
+            sudo swapon /swapfile
+          fi
+          free -h
+          swapon --show
           cd ksrc
           export PATH=/usr/lib/llvm-19/bin:$PATH
           export ARCH=arm64 SUBARCH=arm64
