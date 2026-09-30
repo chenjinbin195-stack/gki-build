@@ -1,0 +1,148 @@
+name: Build KSU-GKI (5.10 android12)
+
+on:
+  workflow_dispatch:
+    inputs:
+      full_lto:
+        description: 'FULL LTO (true=复现原厂 / false=THIN)'
+        required: false
+        default: 'true'
+      sublevel:
+        description: 'SUBLEVEL (对齐设备=257)'
+        required: false
+        default: '257'
+      ksu_branch:
+        description: 'KernelSU branch/tag'
+        required: false
+        default: 'main'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    steps:
+      - name: checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          repository: NetizenNemo/android_gki_kernel_5.10_common
+          ref: android12-5.10
+          path: ksrc
+          fetch-depth: 1
+
+      - name: checkout assets
+        uses: actions/checkout@v4
+        with:
+          path: assets
+
+      - name: deps + clang19
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bc bison flex libssl-dev libelf-dev cpio rsync zip unzip dos2unix clang-19 lld-19 llvm-19 gcc-aarch64-linux-gnu
+          /usr/lib/llvm-19/bin/clang --version
+          aarch64-linux-gnu-gcc --version | head -1
+
+      - name: unpack boot template
+        run: |
+          cd assets
+          if [ -f boot_template.img.gz ]; then gunzip -kf boot_template.img.gz; fi
+          ls -la boot_template.img*
+
+      - name: align sublevel
+        run: |
+          cd ksrc
+          sed -i "s/^SUBLEVEL = .*/SUBLEVEL = ${{ github.event.inputs.sublevel }}/" Makefile
+          sed -i 's/^EXTRAVERSION =.*/EXTRAVERSION =/' Makefile
+          grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION)' Makefile
+
+      - name: integrate KernelSU
+        run: |
+          git clone --depth=1 -b "${{ github.event.inputs.ksu_branch }}" https://github.com/tiann/KernelSU.git ksu
+          cp -a ksu/kernel ksrc/drivers/kernelsu
+          grep -q kernelsu ksrc/drivers/Makefile || printf "\nobj-$(CONFIG_KSU) += kernelsu/\n" >> ksrc/drivers/Makefile
+          grep -q kernelsu ksrc/drivers/Kconfig || sed -i '/^endmenu/i source "drivers/kernelsu/Kconfig"' ksrc/drivers/Kconfig
+          tail -2 ksrc/drivers/Makefile
+          tail -2 ksrc/drivers/Kconfig
+
+      - name: device config
+        run: |
+          cp assets/device.config ksrc/arch/arm64/configs/gki_defconfig
+          cd ksrc
+          sed -i 's|^CONFIG_LOCALVERSION=.*|CONFIG_LOCALVERSION="-android12-9-Kirara-RiverSouth-26Y06LTSR01-nemo"|' arch/arm64/configs/gki_defconfig
+          sed -i 's/^CONFIG_LOCALVERSION_AUTO=y/# CONFIG_LOCALVERSION_AUTO is not set/' arch/arm64/configs/gki_defconfig
+          sed -i '/^CONFIG_KSU=/d;/^CONFIG_KSU_DEBUG=/d' arch/arm64/configs/gki_defconfig
+          printf 'CONFIG_KSU=y\nCONFIG_KSU_DEBUG=n\n' >> arch/arm64/configs/gki_defconfig
+          grep -E 'LOCALVERSION|CONFIG_KSU=|LTO_CLANG_|CFI_CLANG=' arch/arm64/configs/gki_defconfig | head
+
+      - name: lto mode
+        run: |
+          cd ksrc
+          if [ "${{ github.event.inputs.full_lto }}" = "true" ]; then
+            ./scripts/config --file arch/arm64/configs/gki_defconfig -e LTO -e LTO_CLANG -e LTO_CLANG_FULL -d LTO_CLANG_THIN -d LTO_NONE
+          else
+            ./scripts/config --file arch/arm64/configs/gki_defconfig -e LTO -e LTO_CLANG -e LTO_CLANG_THIN -d LTO_CLANG_FULL -d LTO_NONE
+          fi
+          grep -E 'LTO' arch/arm64/configs/gki_defconfig | head -6
+
+      - name: build
+        run: |
+          cd ksrc
+          export PATH=/usr/lib/llvm-19/bin:$PATH
+          export ARCH=arm64 SUBARCH=arm64
+          export CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump READELF=llvm-readelf STRIP=llvm-strip
+          export LLVM=1 LLVM_IAS=1
+          export KBUILD_BUILD_USER=nemo
+          export KBUILD_BUILD_HOST=NetizenNemo-PC
+          export KBUILD_BUILD_TIMESTAMP='2026-06-14 17:09:13'
+          mkdir -p out
+          make O=out ARCH=arm64 gki_defconfig
+          make O=out ARCH=arm64 -j$(nproc)
+          ls -la out/arch/arm64/boot/
+
+      - name: verify
+        run: |
+          cd ksrc
+          echo '=== vermagic ==='
+          strings out/arch/arm64/boot/Image | grep -aE '5[.]10[.]257-android12-9-Kirara' | head -2 || true
+          echo '=== features ==='
+          for kw in KernelSU ksu_ KSU_SUSFS; do printf '%s: ' "$kw"; strings out/arch/arm64/boot/Image | grep -ac "$kw" || echo 0; done
+
+      - name: pack boot.img
+        run: |
+          curl -sL -o m.apk https://github.com/topjohnwu/Magisk/releases/download/v27.0/Magisk-v27.0.apk
+          mkdir -p mb && unzip -o -j m.apk 'lib/x86_64/libmagiskboot.so' -d mb
+          chmod +x mb/libmagiskboot.so
+          mkdir -p pack && cd pack
+          cp ../assets/boot_template.img boot.img
+          ../mb/libmagiskboot.so unpack -h boot.img
+          cp ../ksrc/out/arch/arm64/boot/Image ./kernel
+          ../mb/libmagiskboot.so repack boot.img ../new_boot.img
+          ls -la ../new_boot.img
+
+      - name: header check
+        run: |
+          python3 - <<'PY'
+          import struct, os, sys
+          f='new_boot.img'
+          if not os.path.exists(f):
+              print('no artifact'); sys.exit(0)
+          d=open(f,'rb').read()
+          ks,rs=struct.unpack('<II',d[8:16])
+          off,real=0x1000,0
+          while off<len(d):
+              blk=d[off:off+4096]
+              if not blk or not any(blk): break
+              real+=4096; off+=4096
+          print('header_kernel_size =',ks)
+          print('real_kernel_size   =',real)
+          print('HEADER_CHECK:', 'PASS' if abs(ks-real)<0x2000 else 'FAIL')
+          print('total =', len(d))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ksu-gki-boot
+          path: |
+            new_boot.img
+            ksrc/out/arch/arm64/boot/Image
+            ksrc/arch/arm64/configs/gki_defconfig
+          if-no-files-found: warn

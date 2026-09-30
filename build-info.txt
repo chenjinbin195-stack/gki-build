@@ -1,0 +1,15 @@
+KERNEL_VERSION=5.10.257-android12-9-Kirara-RiverSouth-26Y06LTSR01-nemo
+VERMAGIC=5.10.257-android12-9-Kirara-RiverSouth-26Y06LTSR01-nemo SMP preempt mod_unload modversions aarch64
+LOCALVERSION=-android12-9-Kirara-RiverSouth-26Y06LTSR01-nemo
+BUILDER=nemo@NetizenNemo-PC
+TOOLCHAIN=Android clang 19.0.1 r536225 LLD 19.0.1
+BUILD_FLAGS=+pgo +bolt +lto +mlgo
+BUILD_TIME=Sun Jun 14 17:09:13 CST 2026
+HEADER_VER=4
+KERNEL_SZ=41746516
+RAMDISK_SZ=1380093
+PAGESIZE=4096
+RAMDISK_FMT=lz4_legacy
+OS_VERSION=12.0.0
+OS_PATCH=2025-09
+SOURCE=https://github.com/NetizenNemo/android_gki_kernel_5.10_common (branch android12-5.10, Makefile 5.10.245)

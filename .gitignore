@@ -1,0 +1,5 @@
+*.img
+!boot_template.img
+*.apk
+ksrc/
+new_boot.img
