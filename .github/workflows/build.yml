@@ -18,7 +18,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 350
     steps:
       - name: checkout kernel source
@@ -37,9 +37,8 @@ jobs:
       - name: deps + clang19
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq bc bison flex libssl-dev libelf-dev cpio rsync zip unzip dos2unix clang-19 lld-19 llvm-19 gcc-aarch64-linux-gnu
+          sudo apt-get install -y -qq bc bison flex libssl-dev libelf-dev cpio rsync zip unzip dos2unix clang-19 lld-19 llvm-19
           /usr/lib/llvm-19/bin/clang --version
-          aarch64-linux-gnu-gcc --version | head -1
 
       - name: unpack boot template
         run: |
@@ -88,7 +87,10 @@ jobs:
           cd ksrc
           export PATH=/usr/lib/llvm-19/bin:$PATH
           export ARCH=arm64 SUBARCH=arm64
-          export CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump READELF=llvm-readelf STRIP=llvm-strip
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CC="clang --target=aarch64-linux-gnu"
+          export HOSTCC="clang --target=x86_64-linux-gnu"
+          export LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump READELF=llvm-readelf STRIP=llvm-strip
           export LLVM=1 LLVM_IAS=1
           export KBUILD_BUILD_USER=nemo
           export KBUILD_BUILD_HOST=NetizenNemo-PC
@@ -109,7 +111,7 @@ jobs:
       - name: pack boot.img
         run: |
           curl -sL -o m.apk https://github.com/topjohnwu/Magisk/releases/download/v27.0/Magisk-v27.0.apk
-          mkdir -p mb && unzip -o -j m.apk 'lib/x86_64/libmagiskboot.so' -d mb
+          mkdir -p mb && unzip -o -j m.apk 'lib/arm64-v8a/libmagiskboot.so' -d mb
           chmod +x mb/libmagiskboot.so
           mkdir -p pack && cd pack
           cp ../assets/boot_template.img boot.img
