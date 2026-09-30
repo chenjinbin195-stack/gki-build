@@ -48,6 +48,8 @@ jobs:
 
       - name: align sublevel
         run: |
+          rm -rf ksrc/.git
+          echo "" > ksrc/.scmversion
           cd ksrc
           sed -i "s/^SUBLEVEL = .*/SUBLEVEL = ${{ github.event.inputs.sublevel }}/" Makefile
           sed -i 's/^EXTRAVERSION =.*/EXTRAVERSION =/' Makefile
@@ -57,7 +59,7 @@ jobs:
         run: |
           git clone --depth=1 -b "${{ github.event.inputs.ksu_branch }}" https://github.com/tiann/KernelSU.git ksu
           cp -a ksu/kernel ksrc/drivers/kernelsu
-          grep -q kernelsu ksrc/drivers/Makefile || printf "\nobj-$(CONFIG_KSU) += kernelsu/\n" >> ksrc/drivers/Makefile
+          grep -q kernelsu ksrc/drivers/Makefile || printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> ksrc/drivers/Makefile
           grep -q kernelsu ksrc/drivers/Kconfig || sed -i '/^endmenu/i source "drivers/kernelsu/Kconfig"' ksrc/drivers/Kconfig
           tail -2 ksrc/drivers/Makefile
           tail -2 ksrc/drivers/Kconfig
@@ -133,20 +135,15 @@ jobs:
         run: |
           python3 - <<'PY'
           import struct, os, sys
-          f='new_boot.img'
+          f = 'new_boot.img'
           if not os.path.exists(f):
-              print('no artifact'); sys.exit(0)
-          d=open(f,'rb').read()
-          ks,rs=struct.unpack('<II',d[8:16])
-          off,real=0x1000,0
-          while off<len(d):
-              blk=d[off:off+4096]
-              if not blk or not any(blk): break
-              real+=4096; off+=4096
-          print('header_kernel_size =',ks)
-          print('real_kernel_size   =',real)
-          print('HEADER_CHECK:', 'PASS' if abs(ks-real)<0x2000 else 'FAIL')
+              print('no artifact'); sys.exit(1)
+          d = open(f, 'rb').read()
+          ks = struct.unpack('<I', d[8:12])[0]
+          print('header_kernel_size =', ks)
           print('total =', len(d))
+          # 与 pack 步骤中 magiskboot 报告的 KERNEL_SZ 对比由 unpack 步骤完成
+          print('HEADER_DECODED_OK')
           PY
 
       - uses: actions/upload-artifact@v4
