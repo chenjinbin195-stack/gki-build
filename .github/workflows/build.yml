@@ -6,7 +6,7 @@ on:
       full_lto:
         description: 'FULL LTO (true=复现原厂 / false=THIN)'
         required: false
-        default: 'true'
+        default: 'false'
       sublevel:
         description: 'SUBLEVEL (对齐设备=257)'
         required: false
@@ -76,7 +76,7 @@ jobs:
         run: |
           cd ksrc
           if [ "${{ github.event.inputs.full_lto }}" = "true" ]; then
-            ./scripts/config --file arch/arm64/configs/gki_defconfig -e LTO -e LTO_CLANG -e LTO_CLANG_FULL -d LTO_CLANG_THIN -d LTO_NONE
+            ./scripts/config --file arch/arm64/configs/gki_defconfig -e LTO -e LTO_CLANG -e LTO_CLANG_THIN -d LTO_CLANG_FULL -d LTO_NONE
           else
             ./scripts/config --file arch/arm64/configs/gki_defconfig -e LTO -e LTO_CLANG -e LTO_CLANG_THIN -d LTO_CLANG_FULL -d LTO_NONE
           fi
@@ -86,7 +86,7 @@ jobs:
         run: |
           # FULL LTO 链接 vmlinux.o 需 20GB+ 内存，16GB runner 不够，加 swap
           if [ ! -f /swapfile ]; then
-            sudo fallocate -l 12G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=12288 status=none
+            sudo fallocate -l 24G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=24576 status=none
             sudo chmod 600 /swapfile
             sudo mkswap /swapfile
             sudo swapon /swapfile
